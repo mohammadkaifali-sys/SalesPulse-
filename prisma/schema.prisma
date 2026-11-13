@@ -1,0 +1,218 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+model User {
+  id            String       @id @default(cuid())
+  name          String?
+  email         String       @unique
+  passwordHash  String?
+  avatarUrl     String?
+  memberships   Membership[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Organization {
+  id             String          @id @default(cuid())
+  name           String
+  slug           String          @unique
+  memberships    Membership[]
+  invitations    Invitation[]
+  datasets       Dataset[]
+  salesRecords   SalesRecord[]
+  reports        Report[]
+  schedules      ReportSchedule[]
+  subscription   Subscription?
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([slug])
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  role           Role         @default(MEMBER)
+  userId         String
+  organizationId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model Invitation {
+  id             String       @id @default(cuid())
+  email          String
+  role           Role         @default(MEMBER)
+  token          String       @unique
+  expiresAt      DateTime
+  organizationId String
+  invitedById    String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([token])
+}
+
+model Dataset {
+  id             String        @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String
+  createdById    String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  salesRecords   SalesRecord[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+}
+
+model SalesRecord {
+  id              String       @id @default(cuid())
+  organizationId  String
+  datasetId       String?
+  date            DateTime
+  customerName    String
+  productCategory String
+  productName     String
+  quantity        Int
+  unitPrice       Decimal      @db.Decimal(10, 2)
+  totalAmount     Decimal      @db.Decimal(10, 2)
+  status          String       @default("COMPLETED")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dataset         Dataset?     @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, date])
+}
+
+model Report {
+  id             String           @id @default(cuid())
+  title          String
+  description    String?
+  queryConfig    Json
+  chartType      String
+  organizationId String
+  createdById    String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  schedules      ReportSchedule[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId])
+}
+
+model ReportSchedule {
+  id             String       @id @default(cuid())
+  reportId       String
+  organizationId String
+  frequency      String
+  recipients     Json
+  isActive       Boolean      @default(true)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime?
+  report         Report       @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([reportId])
+}
+
+model Plan {
+  id            String         @id @default(cuid())
+  name          String
+  code          String         @unique
+  maxUsers      Int
+  maxRows       Int
+  features      Json
+  priceMonthly  Decimal        @db.Decimal(10, 2)
+  priceYearly   Decimal        @db.Decimal(10, 2)
+  subscriptions Subscription[]
+  createdAt     DateTime       @default(now())
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  organizationId       String             @unique
+  planId               String
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  currentPeriodStart   DateTime           @default(now())
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan                 Plan               @relation(fields: [planId], references: [id])
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([organizationId])
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String
+  resourceType   String
+  resourceId     String?
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model Notification {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  title          String
+  message        String
+  type           String       @default("INFO")
+  isRead         Boolean      @default(false)
+  link           String?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+}
