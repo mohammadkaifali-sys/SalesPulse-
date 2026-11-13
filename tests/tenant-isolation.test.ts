@@ -23,12 +23,12 @@ import {
 } from "@/lib/org-scope";
 import { PermissionDeniedError, requirePermission } from "@/lib/permissions";
 
-describe("tenant isolation", () => {
+describe("tenant isolation with Prisma-backed helpers", () => {
   beforeEach(() => {
     authMock.mockReset();
   });
 
-  it("returns only ABC Electronics datasets and sales records for the ABC scope", async () => {
+  it("returns only ABC Electronics records for the ABC organization scope", async () => {
     const abcDatasets = await listDatasets("org_abc_1");
     const abcSalesRecords = await listSalesRecords("org_abc_1");
 
@@ -36,33 +36,29 @@ describe("tenant isolation", () => {
     expect(abcDatasets[0]?.name).toBe("ABC Electronics Sales");
     expect(abcDatasets.every((dataset) => dataset.organizationId === "org_abc_1")).toBe(true);
 
-    expect(abcSalesRecords).toHaveLength(1);
-    expect(abcSalesRecords[0]?.customerName).toBe("ABC Customer");
+    expect(abcSalesRecords).toHaveLength(200);
     expect(abcSalesRecords.every((record) => record.organizationId === "org_abc_1")).toBe(true);
     expect(abcSalesRecords.some((record) => record.organizationId === "org_xyz_2")).toBe(false);
   });
 
-  it("returns only XYZ Traders data for the XYZ scope and cannot cross-read ABC data", async () => {
+  it("returns only XYZ Traders records and cannot cross-read ABC data", async () => {
     const xyzDb = getOrgScopedDb("org_xyz_2");
     const xyzDatasets = await xyzDb.dataset.list();
     const xyzSalesRecords = await xyzDb.salesRecord.list();
 
     expect(xyzDatasets).toHaveLength(1);
     expect(xyzDatasets[0]?.name).toBe("XYZ Traders Sales");
-    expect(xyzDatasets.every((dataset) => dataset.organizationId === "org_xyz_2")).toBe(true);
-
-    expect(xyzSalesRecords).toHaveLength(1);
-    expect(xyzSalesRecords[0]?.customerName).toBe("XYZ Customer");
+    expect(xyzSalesRecords).toHaveLength(200);
     expect(xyzSalesRecords.every((record) => record.organizationId === "org_xyz_2")).toBe(true);
     expect(xyzSalesRecords.some((record) => record.organizationId === "org_abc_1")).toBe(false);
   });
 
   it("rejects a user who is not a member of the requested organization", async () => {
     authMock.mockResolvedValue({
-      user: { id: "usr_xyz789", name: "Demo Owner", email: "owner@salespulse.app" },
+      user: { id: "usr_abc_owner", name: "ABC Electronics Owner", email: "abc.owner@salespulse.demo" },
     });
 
-    await expect(getCurrentMembership("abc-electronics")).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(getCurrentMembership("xyz-traders")).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });
 

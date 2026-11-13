@@ -3,12 +3,38 @@ import { auth } from "@/auth";
 import { db } from "./db";
 import { Dataset, SalesRecord, Organization, Membership } from "./types";
 import type { User, Role } from "./types";
+import type { Prisma } from "@/generated/prisma/client";
 
 export interface CurrentMembership {
   user: User;
   organization: Organization;
   membership: Membership;
   role: Role;
+}
+
+type PrismaSalesRecord = Prisma.SalesRecordGetPayload<{
+  select: {
+    id: true;
+    organizationId: true;
+    datasetId: true;
+    date: true;
+    customerName: true;
+    productCategory: true;
+    productName: true;
+    quantity: true;
+    unitPrice: true;
+    totalAmount: true;
+    status: true;
+    createdAt: true;
+  };
+}>;
+
+function toSalesRecord(record: PrismaSalesRecord): SalesRecord {
+  return {
+    ...record,
+    unitPrice: record.unitPrice.toNumber(),
+    totalAmount: record.totalAmount.toNumber(),
+  };
 }
 
 /**
@@ -110,7 +136,7 @@ export function getOrgScopedDb(organizationId: string) {
         limit?: number;
         offset?: number;
       }): Promise<SalesRecord[]> {
-        return db.salesRecord.findMany({
+        const records = await db.salesRecord.findMany({
           where: {
             organizationId: scopedOrgId,
             date: {
@@ -121,6 +147,7 @@ export function getOrgScopedDb(organizationId: string) {
           take: options?.limit,
           skip: options?.offset,
         });
+        return records.map(toSalesRecord);
       },
 
       async create(data: {
@@ -134,13 +161,14 @@ export function getOrgScopedDb(organizationId: string) {
         status?: string;
         datasetId?: string;
       }): Promise<SalesRecord> {
-        return db.salesRecord.create({
+        const record = await db.salesRecord.create({
           data: {
             ...data,
             status: data.status || "COMPLETED",
             organizationId: scopedOrgId,
           },
         });
+        return toSalesRecord(record);
       },
     },
 

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { auth } from "@/auth";
-import { db, type DatabaseClient } from "@/lib/db";
+import { db } from "@/lib/db";
 
 const createWorkspaceSchema = z.object({
   name: z
@@ -46,7 +46,7 @@ export async function createOrganizationAction(input: CreateWorkspaceInput) {
 
   try {
     // 3. Create Organization and Membership in a single atomic transaction
-    const newOrganization = await db.$transaction(async (tx: DatabaseClient) => {
+    const newOrganization = await db.$transaction(async (tx) => {
       const existingOrg = await tx.organization.findUnique({
         where: { slug: normalizedSlug },
       });
